@@ -1,0 +1,54 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and runtime output
+*.log
+logs/
+*.pid
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/timing.properties
+
+# Node / Vue
+node_modules/
+dist/
+dist-ssr/
+.vite/
+.nuxt/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local uploads and generated files
+uploads/
+backend/upload/
+oa_files/
+tmp/
+temp/
+output/
+.playwright-cli/
+frontend/.qa-*/
+*.zip
+
+# Docker volumes or local database dumps
+docker-data/
+*.dump
+*.bak

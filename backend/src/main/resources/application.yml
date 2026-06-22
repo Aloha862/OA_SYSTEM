@@ -1,0 +1,89 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: oa-management
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/oa_management?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:oa_user}
+    password: ${DB_PASSWORD:change-me}
+  sql:
+    init:
+      mode: never
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:oa_user}
+    password: ${RABBITMQ_PASSWORD:change-me}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 3
+        max-concurrency: 10
+        prefetch: 1
+  mail:
+    host: ${OA_MAIL_HOST:smtp.qq.com}
+    port: ${OA_MAIL_PORT:587}
+    username: ${OA_MAIL_USERNAME:}
+    password: ${OA_MAIL_PASSWORD:}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+oa:
+  jwt:
+    secret: ${OA_JWT_SECRET:local-development-secret-change-before-deploying}
+    expiration: ${OA_JWT_EXPIRATION:86400000}
+  mail:
+    notification-recipient: ${OA_MAIL_TEST_RECIPIENT:}
+  file:
+    upload-path: ${OA_FILE_UPLOAD_PATH:./upload}
+    access-prefix: /files
+  ai:
+    provider: ${OA_AI_PROVIDER:mock}
+    tongyi:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${DASHSCOPE_API_KEY:${TONGYI_API_KEY:}}
+      model: qwen-plus
