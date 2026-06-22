@@ -14,6 +14,7 @@ import com.example.oa.module.department.mapper.DepartmentMapper;
 import com.example.oa.module.department.service.DepartmentService;
 import com.example.oa.module.department.vo.DepartmentTreeVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Department> implements DepartmentService {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -39,14 +41,16 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
             if (cached instanceof List<?>) {
                 return (List<DepartmentTreeVO>) cached;
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("读取部门树缓存失败，将回源数据库", e);
         }
         List<DepartmentTreeVO> tree = buildTree(list(new LambdaQueryWrapper<Department>()
                 .eq(Department::getStatus, 1)
                 .orderByAsc(Department::getSortOrder, Department::getId)));
         try {
-            redisTemplate.opsForValue().set(CacheConstants.DEPARTMENT_TREE, tree);
-        } catch (Exception ignored) {
+            redisTemplate.opsForValue().set(CacheConstants.DEPARTMENT_TREE, tree, CacheConstants.DEPARTMENT_TTL);
+        } catch (Exception e) {
+            log.warn("写入部门树缓存失败", e);
         }
         return tree;
     }
@@ -125,7 +129,8 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
     public void clearTreeCache() {
         try {
             redisTemplate.delete(CacheConstants.DEPARTMENT_TREE);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("清理部门树缓存失败", e);
         }
     }
 

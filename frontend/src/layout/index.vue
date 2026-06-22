@@ -1,5 +1,6 @@
 <template>
-  <el-container class="oa-layout">
+  <RouterView v-if="route.meta.standalone" />
+  <el-container v-else class="oa-layout">
     <Sidebar :collapsed="collapsed" />
     <el-container class="oa-layout__main">
       <Header :collapsed="collapsed" @toggle="collapsed = !collapsed" />
@@ -16,10 +17,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useRoute } from 'vue-router';
 import Header from './components/Header.vue';
 import Sidebar from './components/Sidebar.vue';
 
 const collapsed = ref(false);
+const route = useRoute();
 </script>
 
 <style scoped>

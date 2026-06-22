@@ -44,12 +44,14 @@ public class RedisConfig {
         return RedisCacheManager.builder(connectionFactory).cacheDefaults(configuration).build();
     }
 
-    private GenericJackson2JsonRedisSerializer redisSerializer() {
+    GenericJackson2JsonRedisSerializer redisSerializer() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.activateDefaultTyping(
                 BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
+                // JDK Stream#toList returns a final immutable implementation. NON_FINAL
+                // omits root type metadata for it and makes the cached value unreadable.
+                ObjectMapper.DefaultTyping.EVERYTHING,
                 JsonTypeInfo.As.PROPERTY
         );
         return new GenericJackson2JsonRedisSerializer(objectMapper);

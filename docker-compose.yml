@@ -6,10 +6,10 @@ services:
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-oa_management}
       MYSQL_USER: ${MYSQL_USER:-oa_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-oa_password}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
@@ -50,8 +50,8 @@ services:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-oa_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-me}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
       TZ: Asia/Shanghai
     volumes:
@@ -72,4 +72,3 @@ volumes:
 networks:
   oa-network:
     driver: bridge
-

@@ -8,7 +8,12 @@ import com.example.oa.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -22,23 +27,36 @@ public class MailServiceImpl implements MailService {
     private final UserMapper userMapper;
     private final MailNotificationProperties mailNotificationProperties;
 
+    @Value("${spring.mail.username:}")
+    private String sender;
+
     @Async
+    @Retryable(retryFor = MailException.class, maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
     @Override
     public void sendNotificationMail(NotificationMessage message) {
-        try {
-            String recipient = mailNotificationProperties.getNotificationRecipient();
-            if (!StringUtils.hasText(recipient)) {
-                return;
-            }
-            User receiver = userMapper.selectById(message.getReceiverId());
-            SimpleMailMessage mail = new SimpleMailMessage();
-            mail.setTo(recipient);
-            mail.setSubject("[OA通知] " + message.getTitle());
-            mail.setText(buildText(message, receiver));
-            mailSender.send(mail);
-        } catch (Exception e) {
-            log.warn("邮件发送失败，不影响主流程: receiverId={}, title={}", message.getReceiverId(), message.getTitle(), e);
+        User receiver = userMapper.selectById(message.getReceiverId());
+        String recipient = StringUtils.hasText(mailNotificationProperties.getNotificationRecipient())
+                ? mailNotificationProperties.getNotificationRecipient()
+                : receiver == null ? null : receiver.getEmail();
+        if (!StringUtils.hasText(recipient)) {
+            log.info("用户未配置邮箱，跳过邮件通知: receiverId={}", message.getReceiverId());
+            return;
         }
+        SimpleMailMessage mail = new SimpleMailMessage();
+        if (StringUtils.hasText(sender)) {
+            mail.setFrom(sender);
+        }
+        mail.setTo(recipient);
+        mail.setSubject("[OA通知] " + message.getTitle());
+        mail.setText(buildText(message, receiver));
+        mailSender.send(mail);
+        log.info("邮件通知发送成功: receiverId={}, eventId={}", message.getReceiverId(), message.getEventId());
+    }
+
+    @Recover
+    public void recover(MailException exception, NotificationMessage message) {
+        log.error("邮件通知重试耗尽: receiverId={}, eventId={}, title={}",
+                message.getReceiverId(), message.getEventId(), message.getTitle(), exception);
     }
 
     private String buildText(NotificationMessage message, User receiver) {

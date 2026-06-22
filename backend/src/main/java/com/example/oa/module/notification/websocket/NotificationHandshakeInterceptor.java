@@ -18,11 +18,18 @@ import java.util.Map;
 public class NotificationHandshakeInterceptor implements HandshakeInterceptor {
 
     private final JwtTokenUtil jwtTokenUtil;
+    private final WebSocketTicketService ticketService;
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
-        String token = UriComponentsBuilder.fromUri(request.getURI()).build().getQueryParams().getFirst("token");
+        var query = UriComponentsBuilder.fromUri(request.getURI()).build().getQueryParams();
+        Long ticketUserId = ticketService.consume(query.getFirst("ticket"));
+        if (ticketUserId != null) {
+            attributes.put("userId", ticketUserId);
+            return true;
+        }
+        String token = query.getFirst("token");
         if (StringUtils.hasText(token) && token.startsWith(SecurityConstants.TOKEN_PREFIX)) {
             token = token.substring(SecurityConstants.TOKEN_PREFIX.length());
         }

@@ -7,6 +7,7 @@ import com.example.oa.module.notification.dto.NotificationQueryRequest;
 import com.example.oa.module.notification.dto.SystemNotificationRequest;
 import com.example.oa.module.notification.entity.Notification;
 import com.example.oa.module.notification.service.NotificationService;
+import com.example.oa.module.notification.websocket.WebSocketTicketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,12 +20,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final WebSocketTicketService webSocketTicketService;
+
+    @PostMapping("/ws-ticket")
+    public Result<Map<String, String>> webSocketTicket() {
+        return Result.success(Map.of("ticket", webSocketTicketService.issue()));
+    }
 
     @GetMapping("/page")
     public Result<PageResult<Notification>> page(NotificationQueryRequest request) {

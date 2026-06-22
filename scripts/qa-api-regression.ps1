@@ -246,7 +246,7 @@ try {
   }
 
   $noticeTitle = "QA_TEMP_NOTICE_$stamp"
-  $sysNotice = Invoke-OaApi -Method Post -Path "/notifications/system" -Token $admin -Body @{ title = $noticeTitle; content = "QA notification regression; fixed mailbox is triggered asynchronously."; type = "SYSTEM" }
+  $sysNotice = Invoke-OaApi -Method Post -Path "/notifications/system" -Token $admin -Body @{ receiverIds = @($employeeId); title = $noticeTitle; content = "QA notification regression; mail and WebSocket delivery are verified separately."; type = "SYSTEM" }
   Add-Result "notification system send all" ($sysNotice.code -eq 200) @{ result = Format-Code $sysNotice }
   Start-Sleep -Milliseconds 800
   $noticePage = Invoke-OaApi -Method Get -Path "/notifications/page?current=1&size=10&keyword=$noticeTitle" -Token $employee

@@ -1,0 +1,19 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/oa_management_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:change-me}
+  data:
+    redis:
+      database: ${REDIS_DATABASE:15}
+  rabbitmq:
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+oa:
+  ai:
+    provider: ${OA_AI_PROVIDER:mock}
+  mail:
+    notification-recipient: ${OA_MAIL_TEST_RECIPIENT:}

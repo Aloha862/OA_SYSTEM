@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 @TableName("sys_notification")
 public class Notification extends BaseEntity {
 
+    private String eventId;
     private Long receiverId;
     private Long senderId;
     private String title;

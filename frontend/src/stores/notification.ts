@@ -46,9 +46,11 @@ export const useNotificationStore = defineStore('notification', () => {
   }
 
   function receiveRealtime(message: Partial<NotificationRecord>) {
+    if (message.eventId && latest.value.some((item) => item.eventId === message.eventId)) return;
     unreadCount.value += 1;
     const record: NotificationRecord = {
       id: Number(message.id || Date.now()),
+      eventId: message.eventId,
       title: message.title || '新的系统通知',
       content: message.content || '',
       type: message.type || 'SYSTEM',

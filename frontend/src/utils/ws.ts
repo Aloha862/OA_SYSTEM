@@ -1,4 +1,5 @@
 import { useNotificationStore } from '@/stores/notification';
+import { notificationsApi } from '@/api/notifications';
 
 class NotificationSocket {
   private socket: WebSocket | null = null;
@@ -6,6 +7,7 @@ class NotificationSocket {
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
   private manualClose = false;
+  private connecting: Promise<void> | null = null;
 
   connect(token: string) {
     if (!token) return;
@@ -19,14 +21,22 @@ class NotificationSocket {
 
     this.token = token;
     this.manualClose = false;
-    this.closeSocket();
+    if (this.connecting) return;
+    this.connecting = this.openWithTicket().finally(() => (this.connecting = null));
+  }
 
+  private async openWithTicket() {
+    this.closeSocket();
+    const { ticket } = await notificationsApi.wsTicket();
+    if (this.manualClose || !this.token) return;
     const base = this.getBaseUrl();
-    const url = `${base}/ws/notification?token=${encodeURIComponent(token)}`;
+    const url = `${base}/ws/notification?ticket=${encodeURIComponent(ticket)}`;
     this.socket = new WebSocket(url);
 
     this.socket.onopen = () => {
       this.reconnectAttempts = 0;
+      useNotificationStore().fetchUnreadCount();
+      useNotificationStore().fetchLatest();
     };
 
     this.socket.onmessage = (event) => {
@@ -46,6 +56,8 @@ class NotificationSocket {
         this.scheduleReconnect();
       }
     };
+
+    this.socket.onerror = () => this.socket?.close();
   }
 
   disconnect() {
@@ -60,7 +72,7 @@ class NotificationSocket {
 
   private scheduleReconnect() {
     if (this.reconnectTimer) return;
-    const delay = Math.min(30000, 1200 * 2 ** this.reconnectAttempts);
+    const delay = Math.min(30000, 1200 * 2 ** this.reconnectAttempts) + Math.floor(Math.random() * 600);
     this.reconnectAttempts += 1;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;

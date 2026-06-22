@@ -2,6 +2,7 @@ package com.example.oa.module.schedule.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.oa.common.exception.BusinessException;
@@ -153,6 +154,15 @@ public class ScheduleServiceImpl extends ServiceImpl<ScheduleMapper, Schedule> i
                 .eq(Schedule::getStatus, ScheduleStatusEnum.NORMAL.name())
                 .le(Schedule::getReminderTime, now));
         for (Schedule schedule : schedules) {
+            // Conditional claim keeps concurrent schedulers from publishing the same reminder.
+            boolean claimed = update(new LambdaUpdateWrapper<Schedule>()
+                    .eq(Schedule::getId, schedule.getId())
+                    .eq(Schedule::getReminderStatus, 0)
+                    .set(Schedule::getReminderStatus, 2));
+            if (!claimed) {
+                continue;
+            }
+            try {
             List<Long> receivers = new ArrayList<>();
             receivers.add(schedule.getCreatorId());
             receivers.addAll(participantMapper.selectList(new LambdaQueryWrapper<ScheduleParticipant>()
@@ -164,6 +174,13 @@ public class ScheduleServiceImpl extends ServiceImpl<ScheduleMapper, Schedule> i
                             schedule.getId(), LocalDateTime.now())));
             schedule.setReminderStatus(1);
             updateById(schedule);
+            } catch (RuntimeException e) {
+                update(new LambdaUpdateWrapper<Schedule>()
+                        .eq(Schedule::getId, schedule.getId())
+                        .eq(Schedule::getReminderStatus, 2)
+                        .set(Schedule::getReminderStatus, 0));
+                throw e;
+            }
         }
     }
 

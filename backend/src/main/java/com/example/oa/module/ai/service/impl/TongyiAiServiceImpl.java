@@ -38,6 +38,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -142,6 +144,80 @@ public class TongyiAiServiceImpl implements AiService {
             data.put("answer", content);
             return AiResponse.of(AiFunctionTypeEnum.QA.name(), PROVIDER, content, data, 0);
         });
+    }
+
+    @Override
+    public AiResponse streamQa(AiQaRequest request, Consumer<String> onDelta) {
+        String userPrompt = """
+                请以企业 OA 系统助手身份回答用户问题。回答要具体、简洁，并优先围绕审批、请假、报销、日程、新闻、通知和用户管理。
+                用户问题：%s
+                """.formatted(nullSafe(request.getQuestion()));
+        long start = System.currentTimeMillis();
+        AiLog log = new AiLog();
+        log.setUserId(resolveUserId());
+        log.setFunctionType(AiFunctionTypeEnum.QA.name());
+        log.setProvider(PROVIDER);
+        log.setModelName(aiProperties.getTongyi().getModel());
+        log.setPrompt("智能问答-流式");
+        try {
+            log.setRequestContent(toJson(request));
+            String content = chatStream(userPrompt, onDelta);
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("answer", content);
+            AiResponse response = AiResponse.of(AiFunctionTypeEnum.QA.name(), PROVIDER, content, data,
+                    System.currentTimeMillis() - start);
+            log.setResponseContent(toJson(response));
+            log.setSuccess(1);
+            log.setCostTimeMs(response.getCostTimeMs());
+            aiLogMapper.insert(log);
+            return response;
+        } catch (Exception e) {
+            log.setSuccess(0);
+            log.setErrorMessage(e.getMessage());
+            log.setCostTimeMs(System.currentTimeMillis() - start);
+            aiLogMapper.insert(log);
+            if (e instanceof BusinessException businessException) throw businessException;
+            throw new BusinessException(500, "AI 流式调用失败：" + e.getMessage());
+        }
+    }
+
+    private String chatStream(String userPrompt, Consumer<String> onDelta) throws IOException, InterruptedException {
+        AiProperties.Tongyi tongyi = aiProperties.getTongyi();
+        if (!StringUtils.hasText(tongyi.getApiKey())) throw new BusinessException("未配置通义千问 API Key");
+        String url = normalizeBaseUrl(tongyi.getBaseUrl()) + "/chat/completions";
+        Map<String, Object> requestBody = bodyMap(tongyi, userPrompt);
+        requestBody.put("stream", true);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(60))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + tongyi.getApiKey())
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody), StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<Stream<String>> response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            String error = response.body().limit(5).reduce("", (left, right) -> left + right);
+            throw new BusinessException(502, "通义千问流式调用失败：" + response.statusCode() + " " + summarizeError(error));
+        }
+        StringBuilder content = new StringBuilder();
+        try (Stream<String> lines = response.body()) {
+            lines.forEach(line -> {
+                if (!line.startsWith("data:")) return;
+                String json = line.substring(5).trim();
+                if (json.isEmpty() || "[DONE]".equals(json)) return;
+                try {
+                    String delta = objectMapper.readTree(json).path("choices").path(0).path("delta").path("content").asText("");
+                    if (!delta.isEmpty()) {
+                        content.append(delta);
+                        onDelta.accept(delta);
+                    }
+                } catch (Exception e) {
+                    throw new IllegalStateException("解析 AI 流式响应失败", e);
+                }
+            });
+        }
+        if (content.isEmpty()) throw new BusinessException(502, "通义千问没有返回有效内容");
+        return content.toString();
     }
 
     private AiResponse execute(String functionType, String prompt, Object request, String userPrompt, Function<String, AiResponse> parser) {

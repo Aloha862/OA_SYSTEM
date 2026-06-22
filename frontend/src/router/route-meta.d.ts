@@ -9,5 +9,6 @@ declare module 'vue-router' {
     hidden?: boolean;
     roles?: Role[];
     requiresApprover?: boolean;
+    standalone?: boolean;
   }
 }

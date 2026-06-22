@@ -107,7 +107,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'ai',
         name: 'Ai',
         component: () => import('@/views/ai/index.vue'),
-        meta: { titleKey: 'route.ai', icon: 'MagicStick' }
+        meta: { titleKey: 'route.ai', icon: 'MagicStick', standalone: true }
       },
       {
         path: 'profile',

@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS sys_file (
 
 CREATE TABLE IF NOT EXISTS sys_notification (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '通知ID',
+    event_id VARCHAR(64) COMMENT '消息幂等ID',
     receiver_id BIGINT NOT NULL COMMENT '接收人ID',
     sender_id BIGINT COMMENT '发送人ID',
     title VARCHAR(200) NOT NULL COMMENT '通知标题',
@@ -251,6 +252,7 @@ CREATE TABLE IF NOT EXISTS sys_notification (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT DEFAULT 0,
     INDEX idx_receiver_id (receiver_id),
+    UNIQUE KEY uk_event_receiver (event_id, receiver_id),
     INDEX idx_read_status (read_status),
     INDEX idx_type (type),
     INDEX idx_business (business_type, business_id)

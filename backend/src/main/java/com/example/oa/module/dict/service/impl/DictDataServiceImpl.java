@@ -12,6 +12,7 @@ import com.example.oa.module.dict.entity.DictData;
 import com.example.oa.module.dict.mapper.DictDataMapper;
 import com.example.oa.module.dict.service.DictDataService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> implements DictDataService {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -54,7 +56,8 @@ public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> i
             if (cached instanceof List<?>) {
                 return (List<DictData>) cached;
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("读取字典缓存失败: typeCode={}", typeCode, e);
         }
         List<DictData> data = list(new LambdaQueryWrapper<DictData>()
                 .eq(DictData::getTypeCode, typeCode)
@@ -70,8 +73,9 @@ public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> i
                 .stream()
                 .toList();
         try {
-            redisTemplate.opsForValue().set(key, data);
-        } catch (Exception ignored) {
+            redisTemplate.opsForValue().set(key, data, CacheConstants.DICT_TTL);
+        } catch (Exception e) {
+            log.warn("写入字典缓存失败: typeCode={}", typeCode, e);
         }
         return data;
     }
@@ -112,7 +116,8 @@ public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> i
     public void clearTypeCache(String typeCode) {
         try {
             redisTemplate.delete(CacheConstants.DICT_TYPE_PREFIX + typeCode);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("清理字典缓存失败: typeCode={}", typeCode, e);
         }
     }
 }

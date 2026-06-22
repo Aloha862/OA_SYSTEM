@@ -19,6 +19,7 @@ import com.example.oa.module.notification.websocket.NotificationWebSocketHandler
 import com.example.oa.module.user.entity.User;
 import com.example.oa.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Notification> implements NotificationService {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -63,14 +65,16 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
             if (cached != null) {
                 return Long.parseLong(String.valueOf(cached));
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("读取未读通知缓存失败: userId={}", userId, e);
         }
         long count = count(new LambdaQueryWrapper<Notification>()
                 .eq(Notification::getReceiverId, userId)
                 .eq(Notification::getReadStatus, 0));
         try {
-            redisTemplate.opsForValue().set(key, count);
-        } catch (Exception ignored) {
+            redisTemplate.opsForValue().set(key, count, CacheConstants.NOTIFICATION_UNREAD_TTL);
+        } catch (Exception e) {
+            log.warn("写入未读通知缓存失败: userId={}", userId, e);
         }
         return count;
     }
@@ -127,6 +131,16 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Notification createFromMessage(NotificationMessage message) {
+        if (!StringUtils.hasText(message.getEventId())) {
+            message.setEventId(java.util.UUID.randomUUID().toString());
+        }
+        Notification existing = getOne(new LambdaQueryWrapper<Notification>()
+                .eq(Notification::getEventId, message.getEventId())
+                .eq(Notification::getReceiverId, message.getReceiverId())
+                .last("LIMIT 1"));
+        if (existing != null) {
+            return existing;
+        }
         Notification notification = BeanUtil.copyProperties(message, Notification.class);
         notification.setReadStatus(0);
         notification.setPushed(0);
@@ -157,7 +171,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     private void clearUnreadCache(Long userId) {
         try {
             redisTemplate.delete(CacheConstants.NOTIFICATION_UNREAD_PREFIX + userId);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("清理未读通知缓存失败: userId={}", userId, e);
         }
     }
 }

@@ -30,6 +30,7 @@ import com.example.oa.module.notification.mq.NotificationProducer;
 import com.example.oa.module.user.entity.User;
 import com.example.oa.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NewsServiceImpl extends ServiceImpl<NewsMapper, News> implements NewsService {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -80,15 +82,17 @@ public class NewsServiceImpl extends ServiceImpl<NewsMapper, News> implements Ne
             if (cached instanceof News news) {
                 return news;
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("读取新闻详情缓存失败: newsId={}", id, e);
         }
         News news = getRequired(id);
         if (!SecurityUtils.isAdmin() && !NewsStatusEnum.PUBLISHED.name().equals(news.getStatus())) {
             throw new BusinessException(403, "新闻未发布");
         }
         try {
-            redisTemplate.opsForValue().set(key, news);
-        } catch (Exception ignored) {
+            redisTemplate.opsForValue().set(key, news, CacheConstants.NEWS_DETAIL_TTL);
+        } catch (Exception e) {
+            log.warn("写入新闻详情缓存失败: newsId={}", id, e);
         }
         return news;
     }
@@ -263,7 +267,8 @@ public class NewsServiceImpl extends ServiceImpl<NewsMapper, News> implements Ne
         try {
             redisTemplate.delete(CacheConstants.NEWS_DETAIL_PREFIX + id);
             redisTemplate.delete(CacheConstants.NEWS_PUBLISHED_LIST);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("清理新闻缓存失败: newsId={}", id, e);
         }
     }
 

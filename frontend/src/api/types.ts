@@ -191,6 +191,7 @@ export interface FileRecord {
 
 export interface NotificationRecord {
   id: number;
+  eventId?: string;
   title: string;
   content?: string;
   type: string;
@@ -215,4 +216,24 @@ export interface AiResponse {
   endTime?: string;
   location?: string;
   [key: string]: unknown;
+}
+
+export interface AiConversation {
+  id: number;
+  title: string;
+  mode: string;
+  modelName?: string;
+  lastMessageAt?: string;
+  createdAt?: string;
+}
+
+export interface AiMessage {
+  id: number;
+  conversationId: number;
+  role: 'USER' | 'ASSISTANT' | 'SYSTEM';
+  content: string;
+  status: 'STREAMING' | 'COMPLETED' | 'FAILED';
+  costTimeMs?: number;
+  errorMessage?: string;
+  createdAt?: string;
 }

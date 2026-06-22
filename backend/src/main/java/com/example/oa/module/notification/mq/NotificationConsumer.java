@@ -4,10 +4,8 @@ import com.example.oa.common.constant.RabbitMqConstants;
 import com.example.oa.module.notification.dto.NotificationMessage;
 import com.example.oa.module.notification.service.MailService;
 import com.example.oa.module.notification.service.NotificationService;
-import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -20,18 +18,16 @@ public class NotificationConsumer {
     private final MailService mailService;
 
     @RabbitListener(queues = RabbitMqConstants.NOTIFICATION_QUEUE)
-    public void consume(NotificationMessage notificationMessage, Message rawMessage, Channel channel) throws Exception {
-        long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
+    public void consume(NotificationMessage notificationMessage) {
         try {
             notificationService.createFromMessage(notificationMessage);
             if (notificationMessage.getType() != null
                     && (notificationMessage.getType().startsWith("schedule.") || notificationMessage.getType().equals("system.notice"))) {
                 mailService.sendNotificationMail(notificationMessage);
             }
-            channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
             log.error("通知消息消费失败: {}", notificationMessage, e);
-            channel.basicNack(deliveryTag, false, false);
+            throw new IllegalStateException("通知消息消费失败", e);
         }
     }
 }

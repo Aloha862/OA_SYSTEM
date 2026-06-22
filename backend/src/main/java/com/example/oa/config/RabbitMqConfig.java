@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -24,7 +25,10 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue notificationQueue() {
-        return new Queue(RabbitMqConstants.NOTIFICATION_QUEUE, true);
+        return QueueBuilder.durable(RabbitMqConstants.NOTIFICATION_QUEUE)
+                .deadLetterExchange(RabbitMqConstants.NOTIFICATION_DEAD_EXCHANGE)
+                .deadLetterRoutingKey(RabbitMqConstants.NOTIFICATION_DEAD_ROUTING_KEY)
+                .build();
     }
 
     @Bean
@@ -32,6 +36,23 @@ public class RabbitMqConfig {
         return BindingBuilder.bind(notificationQueue)
                 .to(notificationExchange)
                 .with(RabbitMqConstants.NOTIFICATION_ROUTING_KEY);
+    }
+
+    @Bean
+    public TopicExchange notificationDeadExchange() {
+        return new TopicExchange(RabbitMqConstants.NOTIFICATION_DEAD_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue notificationDeadQueue() {
+        return QueueBuilder.durable(RabbitMqConstants.NOTIFICATION_DEAD_QUEUE).build();
+    }
+
+    @Bean
+    public Binding notificationDeadBinding() {
+        return BindingBuilder.bind(notificationDeadQueue())
+                .to(notificationDeadExchange())
+                .with(RabbitMqConstants.NOTIFICATION_DEAD_ROUTING_KEY);
     }
 
     @Bean

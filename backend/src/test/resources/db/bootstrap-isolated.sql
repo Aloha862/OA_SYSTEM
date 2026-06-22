@@ -1,0 +1,34 @@
+DROP DATABASE IF EXISTS oa_management_test;
+CREATE DATABASE oa_management_test DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE oa_management_test.sys_user LIKE oa_management.sys_user;
+CREATE TABLE oa_management_test.sys_department LIKE oa_management.sys_department;
+CREATE TABLE oa_management_test.oa_approval LIKE oa_management.oa_approval;
+CREATE TABLE oa_management_test.oa_approval_record LIKE oa_management.oa_approval_record;
+CREATE TABLE oa_management_test.oa_schedule LIKE oa_management.oa_schedule;
+CREATE TABLE oa_management_test.oa_schedule_participant LIKE oa_management.oa_schedule_participant;
+CREATE TABLE oa_management_test.oa_news LIKE oa_management.oa_news;
+CREATE TABLE oa_management_test.oa_news_comment LIKE oa_management.oa_news_comment;
+CREATE TABLE oa_management_test.oa_news_like LIKE oa_management.oa_news_like;
+CREATE TABLE oa_management_test.oa_news_favorite LIKE oa_management.oa_news_favorite;
+CREATE TABLE oa_management_test.sys_dict_type LIKE oa_management.sys_dict_type;
+CREATE TABLE oa_management_test.sys_dict_data LIKE oa_management.sys_dict_data;
+CREATE TABLE oa_management_test.sys_file LIKE oa_management.sys_file;
+CREATE TABLE oa_management_test.sys_notification LIKE oa_management.sys_notification;
+CREATE TABLE oa_management_test.sys_ai_log LIKE oa_management.sys_ai_log;
+
+INSERT INTO oa_management_test.sys_user SELECT * FROM oa_management.sys_user;
+INSERT INTO oa_management_test.sys_department SELECT * FROM oa_management.sys_department;
+INSERT INTO oa_management_test.oa_approval SELECT * FROM oa_management.oa_approval;
+INSERT INTO oa_management_test.oa_approval_record SELECT * FROM oa_management.oa_approval_record;
+INSERT INTO oa_management_test.oa_schedule SELECT * FROM oa_management.oa_schedule;
+INSERT INTO oa_management_test.oa_schedule_participant SELECT * FROM oa_management.oa_schedule_participant;
+INSERT INTO oa_management_test.oa_news SELECT * FROM oa_management.oa_news;
+INSERT INTO oa_management_test.oa_news_comment SELECT * FROM oa_management.oa_news_comment;
+INSERT INTO oa_management_test.oa_news_like SELECT * FROM oa_management.oa_news_like;
+INSERT INTO oa_management_test.oa_news_favorite SELECT * FROM oa_management.oa_news_favorite;
+INSERT INTO oa_management_test.sys_dict_type SELECT * FROM oa_management.sys_dict_type;
+INSERT INTO oa_management_test.sys_dict_data SELECT * FROM oa_management.sys_dict_data;
+INSERT INTO oa_management_test.sys_file SELECT * FROM oa_management.sys_file;
+INSERT INTO oa_management_test.sys_notification SELECT * FROM oa_management.sys_notification;
+INSERT INTO oa_management_test.sys_ai_log SELECT * FROM oa_management.sys_ai_log;

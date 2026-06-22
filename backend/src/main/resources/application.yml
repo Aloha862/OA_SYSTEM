@@ -18,10 +18,10 @@ spring:
       max-request-size: 100MB
   data:
     redis:
-      host: localhost
-      port: 6379
-      password:
-      database: 0
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -34,10 +34,17 @@ spring:
       mandatory: true
     listener:
       simple:
-        acknowledge-mode: manual
+        acknowledge-mode: auto
         concurrency: 3
         max-concurrency: 10
         prefetch: 1
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 10s
   mail:
     host: ${OA_MAIL_HOST:smtp.qq.com}
     port: ${OA_MAIL_PORT:587}
@@ -51,6 +58,9 @@ spring:
           auth: true
           starttls:
             enable: true
+          connectiontimeout: 10000
+          timeout: 15000
+          writetimeout: 15000
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
@@ -73,6 +83,8 @@ knife4j:
     language: zh_cn
 
 oa:
+  cors:
+    allowed-origins: ${OA_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   jwt:
     secret: ${OA_JWT_SECRET:local-development-secret-change-before-deploying}
     expiration: ${OA_JWT_EXPIRATION:86400000}

@@ -19,5 +19,8 @@ export const notificationsApi = {
   },
   system(data: { receiverIds?: number[]; title: string; content: string; type?: string }) {
     return request.post<void>('/notifications/system', data);
+  },
+  wsTicket() {
+    return request.post<{ ticket: string }>('/notifications/ws-ticket');
   }
 };
