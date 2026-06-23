@@ -61,4 +61,9 @@ public class AiConversationController {
     public SseEmitter regenerate(@PathVariable Long id, @PathVariable Long messageId) {
         return conversationService.regenerate(id, messageId);
     }
+
+    @PostMapping(value = "/{id}/regenerate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter regenerateLast(@PathVariable Long id) {
+        return conversationService.regenerateLast(id);
+    }
 }

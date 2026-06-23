@@ -1,4 +1,4 @@
-<template><div class="markdown-body" v-html="html" /></template>
+<template><div class="markdown-body" v-html="html" @click="handleClick" /></template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
@@ -37,7 +37,28 @@ const md = new MarkdownIt({
     return hljs.highlightAuto(code).value;
   }
 });
-const html = computed(() => DOMPurify.sanitize(md.render(props.content || '')));
+const defaultFence = md.renderer.rules.fence!;
+md.renderer.rules.fence = (tokens, index, options, env, self) => {
+  const language = tokens[index].info.trim().split(/\s+/)[0] || 'text';
+  return `<div class="code-block"><div class="code-toolbar"><span>${md.utils.escapeHtml(language)}</span><button type="button" data-copy-code>复制代码</button></div>${defaultFence(tokens, index, options, env, self)}</div>`;
+};
+const defaultLinkOpen = md.renderer.rules.link_open || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options));
+md.renderer.rules.link_open = (tokens, index, options, env, self) => {
+  tokens[index].attrSet('target', '_blank');
+  tokens[index].attrSet('rel', 'noopener noreferrer');
+  return defaultLinkOpen(tokens, index, options, env, self);
+};
+const html = computed(() => DOMPurify.sanitize(md.render(props.content || ''), {
+  ADD_ATTR: ['target']
+}));
+async function handleClick(event: MouseEvent) {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-copy-code]');
+  if (!button) return;
+  const code = button.closest('.code-block')?.querySelector('code')?.textContent || '';
+  await navigator.clipboard.writeText(code);
+  button.textContent = '已复制';
+  window.setTimeout(() => (button.textContent = '复制代码'), 1400);
+}
 </script>
 
 <style scoped>
@@ -48,6 +69,10 @@ const html = computed(() => DOMPurify.sanitize(md.render(props.content || '')));
 .markdown-body :deep(ul), .markdown-body :deep(ol) { padding-left: 24px; }
 .markdown-body :deep(blockquote) { margin: 14px 0; padding: 2px 0 2px 16px; border-left: 3px solid #9ab8ff; color: #536174; }
 .markdown-body :deep(pre) { margin: 16px 0; padding: 16px; border-radius: 12px; background: #111827; overflow: auto; }
+.markdown-body :deep(.code-block) { margin: 16px 0; overflow: hidden; border-radius: 12px; background: #111827; }
+.markdown-body :deep(.code-toolbar) { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #1f2937; color: #9ca3af; font-size: 12px; }
+.markdown-body :deep(.code-toolbar button) { border: 0; background: transparent; color: #dbeafe; cursor: pointer; }
+.markdown-body :deep(.code-block pre) { margin: 0; border-radius: 0; }
 .markdown-body :deep(pre code) { color: #e5edf8; background: transparent; font-size: 13px; }
 .markdown-body :deep(code) { padding: 2px 6px; border-radius: 5px; background: #eef3fa; font-family: 'SFMono-Regular', Consolas, monospace; font-size: .9em; }
 .markdown-body :deep(a) { color: #245eea; }

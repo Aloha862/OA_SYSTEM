@@ -50,6 +50,7 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/doc.html", "/webjars/**", "/swagger-ui/**", "/swagger-ui.html",
                                 "/v3/api-docs/**", "/favicon.ico", "/ws/**", "/files/**").permitAll()
                         .anyRequest().authenticated())

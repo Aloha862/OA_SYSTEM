@@ -1,6 +1,28 @@
-ALTER TABLE sys_notification
-    ADD COLUMN event_id VARCHAR(64) NULL COMMENT '消息幂等ID' AFTER id,
-    ADD UNIQUE KEY uk_event_receiver (event_id, receiver_id);
+SET @event_column_count = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_notification' AND COLUMN_NAME = 'event_id'
+);
+SET @event_column_sql = IF(
+    @event_column_count = 0,
+    'ALTER TABLE sys_notification ADD COLUMN event_id VARCHAR(64) NULL COMMENT ''消息幂等ID'' AFTER id',
+    'SELECT 1'
+);
+PREPARE event_column_statement FROM @event_column_sql;
+EXECUTE event_column_statement;
+DEALLOCATE PREPARE event_column_statement;
+
+SET @event_index_count = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_notification' AND INDEX_NAME = 'uk_event_receiver'
+);
+SET @event_index_sql = IF(
+    @event_index_count = 0,
+    'ALTER TABLE sys_notification ADD UNIQUE KEY uk_event_receiver (event_id, receiver_id)',
+    'SELECT 1'
+);
+PREPARE event_index_statement FROM @event_index_sql;
+EXECUTE event_index_statement;
+DEALLOCATE PREPARE event_index_statement;
 
 CREATE TABLE IF NOT EXISTS sys_ai_conversation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

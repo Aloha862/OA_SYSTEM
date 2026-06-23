@@ -248,9 +248,14 @@ try {
   $noticeTitle = "QA_TEMP_NOTICE_$stamp"
   $sysNotice = Invoke-OaApi -Method Post -Path "/notifications/system" -Token $admin -Body @{ receiverIds = @($employeeId); title = $noticeTitle; content = "QA notification regression; mail and WebSocket delivery are verified separately."; type = "SYSTEM" }
   Add-Result "notification system send all" ($sysNotice.code -eq 200) @{ result = Format-Code $sysNotice }
-  Start-Sleep -Milliseconds 800
-  $noticePage = Invoke-OaApi -Method Get -Path "/notifications/page?current=1&size=10&keyword=$noticeTitle" -Token $employee
-  $noticeId = ($noticePage.data.records | Select-Object -First 1).id
+  $noticePage = $null
+  $noticeId = $null
+  $noticeDeadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+  do {
+    Start-Sleep -Milliseconds 500
+    $noticePage = Invoke-OaApi -Method Get -Path "/notifications/page?current=1&size=10&keyword=$noticeTitle" -Token $employee
+    $noticeId = ($noticePage.data.records | Select-Object -First 1).id
+  } while (-not $noticeId -and [DateTimeOffset]::UtcNow -lt $noticeDeadline)
   Add-Result "notification keyword page" (($noticePage.code -eq 200) -and [bool]$noticeId) @{ total = $noticePage.data.total; noticeId = $noticeId; result = Format-Code $noticePage }
   if ($noticeId) {
     $read = Invoke-OaApi -Method Put -Path "/notifications/$noticeId/read" -Token $employee

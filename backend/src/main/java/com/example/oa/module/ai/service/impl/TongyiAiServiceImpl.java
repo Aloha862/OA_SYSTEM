@@ -11,6 +11,7 @@ import com.example.oa.module.ai.dto.ScheduleParseRequest;
 import com.example.oa.module.ai.entity.AiLog;
 import com.example.oa.module.ai.enums.AiFunctionTypeEnum;
 import com.example.oa.module.ai.mapper.AiLogMapper;
+import com.example.oa.module.ai.util.AiLogSanitizer;
 import com.example.oa.module.ai.service.AiService;
 import com.example.oa.module.approval.entity.Approval;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -160,20 +161,20 @@ public class TongyiAiServiceImpl implements AiService {
         log.setModelName(aiProperties.getTongyi().getModel());
         log.setPrompt("智能问答-流式");
         try {
-            log.setRequestContent(toJson(request));
+            log.setRequestContent(AiLogSanitizer.request(toJson(request)));
             String content = chatStream(userPrompt, onDelta);
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("answer", content);
             AiResponse response = AiResponse.of(AiFunctionTypeEnum.QA.name(), PROVIDER, content, data,
                     System.currentTimeMillis() - start);
-            log.setResponseContent(toJson(response));
+            log.setResponseContent(AiLogSanitizer.response(toJson(response)));
             log.setSuccess(1);
             log.setCostTimeMs(response.getCostTimeMs());
             aiLogMapper.insert(log);
             return response;
         } catch (Exception e) {
             log.setSuccess(0);
-            log.setErrorMessage(e.getMessage());
+            log.setErrorMessage(AiLogSanitizer.error(e.getMessage()));
             log.setCostTimeMs(System.currentTimeMillis() - start);
             aiLogMapper.insert(log);
             if (e instanceof BusinessException businessException) throw businessException;
@@ -182,6 +183,25 @@ public class TongyiAiServiceImpl implements AiService {
     }
 
     private String chatStream(String userPrompt, Consumer<String> onDelta) throws IOException, InterruptedException {
+        boolean[] emitted = {false};
+        Consumer<String> guardedDelta = delta -> {
+            emitted[0] = true;
+            onDelta.accept(delta);
+        };
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                return chatStreamOnce(userPrompt, guardedDelta);
+            } catch (IOException | BusinessException e) {
+                boolean retryable = e instanceof IOException
+                        || e instanceof BusinessException be && (be.getCode() == 429 || be.getCode() >= 500);
+                if (attempt > 0 || emitted[0] || !retryable) throw e;
+                Thread.sleep(500L);
+            }
+        }
+        throw new IOException("AI stream retry exhausted");
+    }
+
+    private String chatStreamOnce(String userPrompt, Consumer<String> onDelta) throws IOException, InterruptedException {
         AiProperties.Tongyi tongyi = aiProperties.getTongyi();
         if (!StringUtils.hasText(tongyi.getApiKey())) throw new BusinessException("未配置通义千问 API Key");
         String url = normalizeBaseUrl(tongyi.getBaseUrl()) + "/chat/completions";
@@ -197,7 +217,8 @@ public class TongyiAiServiceImpl implements AiService {
         HttpResponse<Stream<String>> response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String error = response.body().limit(5).reduce("", (left, right) -> left + right);
-            throw new BusinessException(502, "通义千问流式调用失败：" + response.statusCode() + " " + summarizeError(error));
+            int code = response.statusCode() == 429 ? 429 : 502;
+            throw new BusinessException(code, "通义千问流式调用失败：" + response.statusCode() + " " + summarizeError(error));
         }
         StringBuilder content = new StringBuilder();
         try (Stream<String> lines = response.body()) {
@@ -230,18 +251,18 @@ public class TongyiAiServiceImpl implements AiService {
         log.setPrompt(prompt);
 
         try {
-            log.setRequestContent(toJson(request));
+            log.setRequestContent(AiLogSanitizer.request(toJson(request)));
             String content = chat(userPrompt);
             AiResponse response = parser.apply(content);
             response.setCostTimeMs(System.currentTimeMillis() - start);
-            log.setResponseContent(toJson(response));
+            log.setResponseContent(AiLogSanitizer.response(toJson(response)));
             log.setSuccess(1);
             log.setCostTimeMs(response.getCostTimeMs());
             aiLogMapper.insert(log);
             return response;
         } catch (Exception e) {
             log.setSuccess(0);
-            log.setErrorMessage(e.getMessage());
+            log.setErrorMessage(AiLogSanitizer.error(e.getMessage()));
             log.setCostTimeMs(System.currentTimeMillis() - start);
             aiLogMapper.insert(log);
             if (e instanceof BusinessException businessException) {

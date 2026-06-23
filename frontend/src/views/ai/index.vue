@@ -197,7 +197,9 @@ function retryLast() { const last = [...messages.value].reverse().find(item => i
 async function regenerate(previous: AiMessage) {
   if (loading.value || !activeId.value || previous.id <= 0) return;
   const assistant: AiMessage = { id: -Date.now(), conversationId: activeId.value, role: 'ASSISTANT', content: '', status: 'STREAMING' };
-  messages.value.push(assistant);
+  const previousIndex = messages.value.findIndex(item => item.id === previous.id);
+  if (previousIndex < 0) return;
+  messages.value.splice(previousIndex, 1, assistant);
   loading.value = true;
   controller = new AbortController();
   await nextTick();
@@ -207,11 +209,16 @@ async function regenerate(previous: AiMessage) {
       onMeta(data) { assistant.id = Number(data.assistantMessageId || assistant.id); },
       onDelta(delta) { assistant.content += delta; if (!showJump.value) nextTick(() => scrollToBottom()); },
       onDone(data) { assistant.status = 'COMPLETED'; assistant.costTimeMs = Number(data.costTimeMs || 0); },
-      onError(data) { assistant.status = 'FAILED'; assistant.errorMessage = data.message || 'AI 服务暂时不可用。'; }
+      onError(data) {
+        messages.value.splice(previousIndex, 1, previous);
+        ElMessage.error(data.message || '重新生成失败，已保留原回答。');
+      }
     }, controller.signal);
   } catch (error) {
-    assistant.status = 'FAILED';
-    assistant.errorMessage = controller.signal.aborted ? '已停止生成。' : error instanceof Error ? error.message : '请求失败，请重试。';
+    messages.value.splice(previousIndex, 1, previous);
+    if (!controller.signal.aborted) {
+      ElMessage.error(error instanceof Error ? error.message : '重新生成失败，已保留原回答。');
+    }
   } finally {
     loading.value = false;
     controller = undefined;

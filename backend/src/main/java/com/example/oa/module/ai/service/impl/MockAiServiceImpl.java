@@ -9,6 +9,7 @@ import com.example.oa.module.ai.dto.ScheduleParseRequest;
 import com.example.oa.module.ai.entity.AiLog;
 import com.example.oa.module.ai.enums.AiFunctionTypeEnum;
 import com.example.oa.module.ai.mapper.AiLogMapper;
+import com.example.oa.module.ai.util.AiLogSanitizer;
 import com.example.oa.module.ai.service.AiService;
 import com.example.oa.module.approval.entity.Approval;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -133,17 +134,17 @@ public class MockAiServiceImpl implements AiService {
         log.setModelName("mock-rules");
         log.setPrompt(prompt);
         try {
-            log.setRequestContent(objectMapper.writeValueAsString(request));
+            log.setRequestContent(AiLogSanitizer.request(objectMapper.writeValueAsString(request)));
             AiResponse response = supplier.get();
             response.setCostTimeMs(System.currentTimeMillis() - start);
-            log.setResponseContent(objectMapper.writeValueAsString(response));
+            log.setResponseContent(AiLogSanitizer.response(objectMapper.writeValueAsString(response)));
             log.setSuccess(1);
             log.setCostTimeMs(response.getCostTimeMs());
             aiLogMapper.insert(log);
             return response;
         } catch (Exception e) {
             log.setSuccess(0);
-            log.setErrorMessage(e.getMessage());
+            log.setErrorMessage(AiLogSanitizer.error(e.getMessage()));
             log.setCostTimeMs(System.currentTimeMillis() - start);
             aiLogMapper.insert(log);
             throw new RuntimeException("AI mock调用失败", e);

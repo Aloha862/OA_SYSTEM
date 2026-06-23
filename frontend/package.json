@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
+    "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
@@ -25,9 +26,12 @@
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.10.1",
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^26.1.0",
     "sass": "^1.81.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
+    "vitest": "^3.2.6",
     "vue-tsc": "^2.1.10"
   }
 }

@@ -17,4 +17,5 @@ public interface AiConversationService {
     void clear(Long id);
     SseEmitter stream(Long conversationId, AiChatRequest request);
     SseEmitter regenerate(Long conversationId, Long assistantMessageId);
+    SseEmitter regenerateLast(Long conversationId);
 }

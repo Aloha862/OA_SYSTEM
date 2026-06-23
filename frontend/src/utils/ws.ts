@@ -42,6 +42,10 @@ class NotificationSocket {
     this.socket.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
+        if (payload.type === 'PING') {
+          this.socket?.send(JSON.stringify({ type: 'PONG' }));
+          return;
+        }
         useNotificationStore().receiveRealtime(payload);
       } catch {
         useNotificationStore().receiveRealtime({

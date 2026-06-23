@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.oa.common.constant.CacheConstants;
+import com.example.oa.common.cache.CacheSupport;
 import com.example.oa.common.exception.BusinessException;
 import com.example.oa.common.result.PageResult;
 import com.example.oa.common.util.SecurityUtils;
@@ -15,7 +16,7 @@ import com.example.oa.module.notification.entity.Notification;
 import com.example.oa.module.notification.mapper.NotificationMapper;
 import com.example.oa.module.notification.mq.NotificationProducer;
 import com.example.oa.module.notification.service.NotificationService;
-import com.example.oa.module.notification.websocket.NotificationWebSocketHandler;
+import com.example.oa.module.notification.websocket.NotificationRealtimeService;
 import com.example.oa.module.user.entity.User;
 import com.example.oa.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +36,8 @@ import java.util.List;
 public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Notification> implements NotificationService {
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final NotificationWebSocketHandler webSocketHandler;
+    private final CacheSupport cacheSupport;
+    private final NotificationRealtimeService realtimeService;
     private final NotificationProducer notificationProducer;
     private final UserMapper userMapper;
 
@@ -72,7 +74,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
                 .eq(Notification::getReceiverId, userId)
                 .eq(Notification::getReadStatus, 0));
         try {
-            redisTemplate.opsForValue().set(key, count, CacheConstants.NOTIFICATION_UNREAD_TTL);
+            redisTemplate.opsForValue().set(key, count, cacheSupport.jitter(CacheConstants.NOTIFICATION_UNREAD_TTL));
         } catch (Exception e) {
             log.warn("写入未读通知缓存失败: userId={}", userId, e);
         }
@@ -114,6 +116,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void sendSystem(SystemNotificationRequest request) {
         List<Long> receivers = request.getReceiverIds();
         if (CollectionUtils.isEmpty(receivers)) {
@@ -146,7 +149,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         notification.setPushed(0);
         save(notification);
         clearUnreadCache(notification.getReceiverId());
-        boolean pushed = webSocketHandler.sendToUser(notification.getReceiverId(), message);
+        boolean pushed = realtimeService.publish(notification.getReceiverId(), message);
         if (pushed) {
             notification.setPushed(1);
             updateById(notification);
@@ -170,7 +173,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     private void clearUnreadCache(Long userId) {
         try {
-            redisTemplate.delete(CacheConstants.NOTIFICATION_UNREAD_PREFIX + userId);
+            cacheSupport.deleteAfterCommit(CacheConstants.NOTIFICATION_UNREAD_PREFIX + userId);
         } catch (Exception e) {
             log.warn("清理未读通知缓存失败: userId={}", userId, e);
         }

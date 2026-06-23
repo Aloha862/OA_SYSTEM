@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.oa.common.constant.CacheConstants;
+import com.example.oa.common.cache.CacheSupport;
 import com.example.oa.common.exception.BusinessException;
 import com.example.oa.common.result.PageResult;
 import com.example.oa.common.util.SecurityUtils;
@@ -45,6 +46,7 @@ import java.util.List;
 public class NewsServiceImpl extends ServiceImpl<NewsMapper, News> implements NewsService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CacheSupport cacheSupport;
     private final NewsCommentMapper newsCommentMapper;
     private final NewsLikeMapper newsLikeMapper;
     private final NewsFavoriteMapper newsFavoriteMapper;
@@ -77,22 +79,10 @@ public class NewsServiceImpl extends ServiceImpl<NewsMapper, News> implements Ne
     @Override
     public News detail(Long id) {
         String key = CacheConstants.NEWS_DETAIL_PREFIX + id;
-        try {
-            Object cached = redisTemplate.opsForValue().get(key);
-            if (cached instanceof News news) {
-                return news;
-            }
-        } catch (Exception e) {
-            log.warn("读取新闻详情缓存失败: newsId={}", id, e);
-        }
-        News news = getRequired(id);
+        News news = cacheSupport.getOrLoad(key, CacheConstants.NEWS_DETAIL_TTL, java.time.Duration.ofMinutes(1),
+                () -> getRequired(id), value -> false);
         if (!SecurityUtils.isAdmin() && !NewsStatusEnum.PUBLISHED.name().equals(news.getStatus())) {
             throw new BusinessException(403, "新闻未发布");
-        }
-        try {
-            redisTemplate.opsForValue().set(key, news, CacheConstants.NEWS_DETAIL_TTL);
-        } catch (Exception e) {
-            log.warn("写入新闻详情缓存失败: newsId={}", id, e);
         }
         return news;
     }
@@ -265,8 +255,7 @@ public class NewsServiceImpl extends ServiceImpl<NewsMapper, News> implements Ne
     @Override
     public void clearNewsCache(Long id) {
         try {
-            redisTemplate.delete(CacheConstants.NEWS_DETAIL_PREFIX + id);
-            redisTemplate.delete(CacheConstants.NEWS_PUBLISHED_LIST);
+            cacheSupport.deleteAfterCommit(CacheConstants.NEWS_DETAIL_PREFIX + id, CacheConstants.NEWS_PUBLISHED_LIST);
         } catch (Exception e) {
             log.warn("清理新闻缓存失败: newsId={}", id, e);
         }

@@ -12,6 +12,7 @@ public final class CacheConstants {
     public static final String NOTIFICATION_UNREAD_PREFIX = "notification:unread:";
     public static final String JWT_BLACKLIST_PREFIX = "jwt:blacklist:";
     public static final String WS_TICKET_PREFIX = "ws:ticket:";
+    public static final String AI_CONTEXT_PREFIX = "ai:context:";
 
     public static final Duration DICT_TTL = Duration.ofHours(6);
     public static final Duration DEPARTMENT_TTL = Duration.ofMinutes(30);

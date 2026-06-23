@@ -2,11 +2,13 @@ package com.example.oa.module.ai.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.oa.common.exception.BusinessException;
+import com.example.oa.common.constant.CacheConstants;
 import com.example.oa.common.util.SecurityUtils;
 import com.example.oa.module.ai.dto.AiChatRequest;
 import com.example.oa.module.ai.dto.AiConversationRequest;
 import com.example.oa.module.ai.dto.AiQaRequest;
 import com.example.oa.module.ai.dto.AiResponse;
+import com.example.oa.module.ai.config.AiConversationProperties;
 import com.example.oa.module.ai.entity.AiConversation;
 import com.example.oa.module.ai.entity.AiMessage;
 import com.example.oa.module.ai.mapper.AiConversationMapper;
@@ -17,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -36,6 +39,8 @@ public class AiConversationServiceImpl implements AiConversationService {
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
     private final AiService aiService;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final AiConversationProperties properties;
     @Qualifier("applicationTaskExecutor")
     private final Executor executor;
 
@@ -85,6 +90,7 @@ public class AiConversationServiceImpl implements AiConversationService {
         AiConversation conversation = requiredConversation(id, requiredUserId());
         conversationMapper.deleteById(conversation);
         messageMapper.delete(new LambdaQueryWrapper<AiMessage>().eq(AiMessage::getConversationId, id));
+        evictContext(id);
     }
 
     @Override
@@ -94,6 +100,7 @@ public class AiConversationServiceImpl implements AiConversationService {
         conversation.setTitle("新对话");
         conversation.setLastMessageAt(LocalDateTime.now());
         conversationMapper.updateById(conversation);
+        evictContext(id);
     }
 
     @Override
@@ -133,10 +140,11 @@ public class AiConversationServiceImpl implements AiConversationService {
                 .eq(AiMessage::getConversationId, conversationId)
                 .in(AiMessage::getRole, List.of("USER", "ASSISTANT"))
                 .orderByDesc(AiMessage::getId)
-                .last("LIMIT 20"));
+                .last("LIMIT " + Math.max(1, properties.getMaxMessages())));
 
         SseEmitter emitter = new SseEmitter(65_000L);
-        executor.execute(() -> generate(emitter, conversation, userMessage, context));
+        String contextText = resolveContext(conversation, userMessage, context);
+        executor.execute(() -> generate(emitter, conversation, userMessage, contextText, null));
         return emitter;
     }
 
@@ -159,13 +167,31 @@ public class AiConversationServiceImpl implements AiConversationService {
                 .in(AiMessage::getRole, List.of("USER", "ASSISTANT"))
                 .le(AiMessage::getId, userMessage.getId())
                 .orderByDesc(AiMessage::getId)
-                .last("LIMIT 20"));
+                .last("LIMIT " + Math.max(1, properties.getMaxMessages())));
         SseEmitter emitter = new SseEmitter(65_000L);
-        executor.execute(() -> generate(emitter, conversation, userMessage, context));
+        String contextText = buildContext(context, conversation.getMode());
+        executor.execute(() -> generate(emitter, conversation, userMessage, contextText, previous.getId()));
         return emitter;
     }
 
-    private void generate(SseEmitter emitter, AiConversation conversation, AiMessage userMessage, List<AiMessage> context) {
+    @Override
+    public SseEmitter regenerateLast(Long conversationId) {
+        Long userId = requiredUserId();
+        requiredConversation(conversationId, userId);
+        AiMessage previous = messageMapper.selectOne(new LambdaQueryWrapper<AiMessage>()
+                .eq(AiMessage::getConversationId, conversationId)
+                .eq(AiMessage::getUserId, userId)
+                .eq(AiMessage::getRole, "ASSISTANT")
+                .orderByDesc(AiMessage::getId)
+                .last("LIMIT 1"));
+        if (previous == null) {
+            throw new BusinessException(404, "当前会话没有可重新生成的回答");
+        }
+        return regenerate(conversationId, previous.getId());
+    }
+
+    private void generate(SseEmitter emitter, AiConversation conversation, AiMessage userMessage,
+                          String contextText, Long replacedMessageId) {
         long start = System.currentTimeMillis();
         AiMessage assistant = new AiMessage();
         assistant.setConversationId(conversation.getId());
@@ -180,7 +206,7 @@ public class AiConversationServiceImpl implements AiConversationService {
                     "userMessageId", userMessage.getId(),
                     "assistantMessageId", assistant.getId()));
             AiQaRequest qaRequest = new AiQaRequest();
-            qaRequest.setQuestion(buildContext(context, conversation.getMode()));
+            qaRequest.setQuestion(contextText);
             AiResponse response = aiService.streamQa(qaRequest, delta -> {
                 try {
                     send(emitter, "delta", Map.of("content", delta));
@@ -197,6 +223,14 @@ public class AiConversationServiceImpl implements AiConversationService {
             assistant.setModelName(response.getProvider());
             assistant.setCostTimeMs(System.currentTimeMillis() - start);
             messageMapper.updateById(assistant);
+            if (replacedMessageId != null) {
+                try {
+                    messageMapper.deleteById(replacedMessageId);
+                } catch (Exception cleanupError) {
+                    log.warn("重新生成成功，但旧回答清理失败: oldMessageId={}", replacedMessageId, cleanupError);
+                }
+            }
+            cacheContext(conversation.getId(), contextText + "\n助手：" + content);
             send(emitter, "done", Map.of(
                     "messageId", assistant.getId(),
                     "finishReason", "stop",
@@ -204,12 +238,17 @@ public class AiConversationServiceImpl implements AiConversationService {
             emitter.complete();
         } catch (Exception e) {
             log.error("AI 会话生成失败: conversationId={}", conversation.getId(), e);
-            assistant.setStatus("FAILED");
-            assistant.setErrorCode(e instanceof BusinessException be ? String.valueOf(be.getCode()) : "AI_ERROR");
+            boolean cancelled = isClientCancellation(e);
+            assistant.setStatus(cancelled ? "CANCELLED" : "FAILED");
+            assistant.setErrorCode(cancelled ? "CANCELLED" : e instanceof BusinessException be ? String.valueOf(be.getCode()) : "AI_ERROR");
             assistant.setErrorMessage(safeMessage(e));
             assistant.setCostTimeMs(System.currentTimeMillis() - start);
             messageMapper.updateById(assistant);
             try {
+                if (cancelled) {
+                    emitter.complete();
+                    return;
+                }
                 send(emitter, "error", Map.of("code", assistant.getErrorCode(), "message", assistant.getErrorMessage(), "retryable", true));
             } catch (Exception ignored) {
                 // connection already closed
@@ -230,11 +269,46 @@ public class AiConversationServiceImpl implements AiConversationService {
             AiMessage item = newestFirst.get(i);
             builder.append("ASSISTANT".equals(item.getRole()) ? "助手：" : "用户：")
                     .append(item.getContent()).append('\n');
-            if (builder.length() > 12_000) {
-                return builder.substring(builder.length() - 12_000);
+            int maxCharacters = Math.max(1000, properties.getMaxCharacters());
+            if (builder.length() > maxCharacters) {
+                return builder.substring(builder.length() - maxCharacters);
             }
         }
         return builder.toString();
+    }
+
+    private String resolveContext(AiConversation conversation, AiMessage userMessage, List<AiMessage> databaseContext) {
+        try {
+            Object cached = redisTemplate.opsForValue().get(CacheConstants.AI_CONTEXT_PREFIX + conversation.getId());
+            if (cached instanceof String text && StringUtils.hasText(text)) {
+                return trimContext(text + "\n用户：" + userMessage.getContent());
+            }
+        } catch (Exception e) {
+            log.warn("读取AI上下文缓存失败: conversationId={}", conversation.getId(), e);
+        }
+        return buildContext(databaseContext, conversation.getMode());
+    }
+
+    private void cacheContext(Long conversationId, String context) {
+        try {
+            redisTemplate.opsForValue().set(CacheConstants.AI_CONTEXT_PREFIX + conversationId,
+                    trimContext(context), properties.getCacheTtl());
+        } catch (Exception e) {
+            log.warn("写入AI上下文缓存失败: conversationId={}", conversationId, e);
+        }
+    }
+
+    private void evictContext(Long conversationId) {
+        try {
+            redisTemplate.delete(CacheConstants.AI_CONTEXT_PREFIX + conversationId);
+        } catch (Exception e) {
+            log.warn("清理AI上下文缓存失败: conversationId={}", conversationId, e);
+        }
+    }
+
+    private String trimContext(String value) {
+        int max = Math.max(1000, properties.getMaxCharacters());
+        return value.length() <= max ? value : value.substring(value.length() - max);
     }
 
     private void send(SseEmitter emitter, String event, Object data) throws IOException {
@@ -260,5 +334,17 @@ public class AiConversationServiceImpl implements AiConversationService {
     private String safeMessage(Exception e) {
         String message = e.getMessage();
         return StringUtils.hasText(message) ? message.substring(0, Math.min(message.length(), 400)) : "AI 服务暂时不可用，请稍后重试";
+    }
+
+    private boolean isClientCancellation(Exception e) {
+        Throwable current = e;
+        while (current != null) {
+            if (current.getMessage() != null && (current.getMessage().contains("客户端已断开")
+                    || current.getMessage().contains("Broken pipe") || current.getMessage().contains("connection abort"))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

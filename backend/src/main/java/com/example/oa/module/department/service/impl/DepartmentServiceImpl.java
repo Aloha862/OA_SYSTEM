@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.oa.common.constant.CacheConstants;
+import com.example.oa.common.cache.CacheSupport;
 import com.example.oa.common.exception.BusinessException;
 import com.example.oa.common.result.PageResult;
 import com.example.oa.module.department.dto.DepartmentQueryRequest;
@@ -32,27 +33,16 @@ import java.util.stream.Collectors;
 public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Department> implements DepartmentService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CacheSupport cacheSupport;
 
     @Override
-    @SuppressWarnings("unchecked")
     public List<DepartmentTreeVO> tree() {
-        try {
-            Object cached = redisTemplate.opsForValue().get(CacheConstants.DEPARTMENT_TREE);
-            if (cached instanceof List<?>) {
-                return (List<DepartmentTreeVO>) cached;
-            }
-        } catch (Exception e) {
-            log.warn("读取部门树缓存失败，将回源数据库", e);
-        }
-        List<DepartmentTreeVO> tree = buildTree(list(new LambdaQueryWrapper<Department>()
-                .eq(Department::getStatus, 1)
-                .orderByAsc(Department::getSortOrder, Department::getId)));
-        try {
-            redisTemplate.opsForValue().set(CacheConstants.DEPARTMENT_TREE, tree, CacheConstants.DEPARTMENT_TTL);
-        } catch (Exception e) {
-            log.warn("写入部门树缓存失败", e);
-        }
-        return tree;
+        return cacheSupport.getOrLoad(CacheConstants.DEPARTMENT_TREE, CacheConstants.DEPARTMENT_TTL,
+                java.time.Duration.ofMinutes(2),
+                () -> buildTree(list(new LambdaQueryWrapper<Department>()
+                        .eq(Department::getStatus, 1)
+                        .orderByAsc(Department::getSortOrder, Department::getId))),
+                List::isEmpty);
     }
 
     @Override
@@ -128,7 +118,7 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
     @Override
     public void clearTreeCache() {
         try {
-            redisTemplate.delete(CacheConstants.DEPARTMENT_TREE);
+            cacheSupport.deleteAfterCommit(CacheConstants.DEPARTMENT_TREE);
         } catch (Exception e) {
             log.warn("清理部门树缓存失败", e);
         }

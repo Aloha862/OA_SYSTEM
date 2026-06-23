@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.oa.common.constant.CacheConstants;
+import com.example.oa.common.cache.CacheSupport;
 import com.example.oa.common.result.PageResult;
 import com.example.oa.module.dict.dto.DictDataQueryRequest;
 import com.example.oa.module.dict.dto.DictDataRequest;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> implements DictDataService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CacheSupport cacheSupport;
 
     @Override
     public PageResult<DictData> pageData(DictDataQueryRequest request) {
@@ -48,36 +50,17 @@ public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> i
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public List<DictData> listByTypeCode(String typeCode) {
         String key = CacheConstants.DICT_TYPE_PREFIX + typeCode;
-        try {
-            Object cached = redisTemplate.opsForValue().get(key);
-            if (cached instanceof List<?>) {
-                return (List<DictData>) cached;
-            }
-        } catch (Exception e) {
-            log.warn("读取字典缓存失败: typeCode={}", typeCode, e);
-        }
-        List<DictData> data = list(new LambdaQueryWrapper<DictData>()
-                .eq(DictData::getTypeCode, typeCode)
-                .eq(DictData::getStatus, 1)
-                .orderByAsc(DictData::getSortOrder, DictData::getId));
-        data = data.stream()
-                .collect(Collectors.toMap(
-                        item -> item.getTypeCode() + ":" + item.getDictValue() + ":" + item.getDictLabel(),
-                        Function.identity(),
-                        (left, right) -> left,
-                        java.util.LinkedHashMap::new))
-                .values()
-                .stream()
-                .toList();
-        try {
-            redisTemplate.opsForValue().set(key, data, CacheConstants.DICT_TTL);
-        } catch (Exception e) {
-            log.warn("写入字典缓存失败: typeCode={}", typeCode, e);
-        }
-        return data;
+        return cacheSupport.getOrLoad(key, CacheConstants.DICT_TTL, java.time.Duration.ofMinutes(2), () ->
+                list(new LambdaQueryWrapper<DictData>()
+                        .eq(DictData::getTypeCode, typeCode)
+                        .eq(DictData::getStatus, 1)
+                        .orderByAsc(DictData::getSortOrder, DictData::getId)).stream()
+                        .collect(Collectors.toMap(
+                                item -> item.getTypeCode() + ":" + item.getDictValue() + ":" + item.getDictLabel(),
+                                Function.identity(), (left, right) -> left, java.util.LinkedHashMap::new))
+                        .values().stream().toList(), List::isEmpty);
     }
 
     @Override
@@ -115,7 +98,7 @@ public class DictDataServiceImpl extends ServiceImpl<DictDataMapper, DictData> i
     @Override
     public void clearTypeCache(String typeCode) {
         try {
-            redisTemplate.delete(CacheConstants.DICT_TYPE_PREFIX + typeCode);
+            cacheSupport.deleteAfterCommit(CacheConstants.DICT_TYPE_PREFIX + typeCode);
         } catch (Exception e) {
             log.warn("清理字典缓存失败: typeCode={}", typeCode, e);
         }
