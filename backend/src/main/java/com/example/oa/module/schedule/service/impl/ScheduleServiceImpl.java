@@ -184,6 +184,13 @@ public class ScheduleServiceImpl extends ServiceImpl<ScheduleMapper, Schedule> i
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int finishExpiredSchedules() {
+        LocalDateTime now = LocalDateTime.now();
+        return baseMapper.finishExpired(now);
+    }
+
     private LambdaQueryWrapper<Schedule> visibleQuery(ScheduleQueryRequest request) {
         String keyword = request.getKeyword();
         LambdaQueryWrapper<Schedule> query = new LambdaQueryWrapper<Schedule>()

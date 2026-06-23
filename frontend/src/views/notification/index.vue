@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import { Check, Message, Promotion } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
@@ -122,6 +122,8 @@ const selectedIds = ref<number[]>([]);
 const sendVisible = ref(false);
 const users = ref<UserRecord[]>([]);
 const sendFormRef = ref<FormInstance>();
+let syncGeneration = 0;
+let realtimeRefreshTimer: number | undefined;
 
 const query = reactive<PageQuery>({
   pageNum: 1,
@@ -205,26 +207,69 @@ async function send() {
   await sendFormRef.value?.validate();
   sending.value = true;
   try {
+    const receiverIds = [...sendForm.receiverIds];
+    const sentTitle = sendForm.title;
+    const sentContent = sendForm.content;
     await notificationsApi.system({
-      title: sendForm.title,
-      content: sendForm.content,
+      title: sentTitle,
+      content: sentContent,
       type: 'SYSTEM',
-      ...(sendForm.receiverIds.length ? { receiverIds: [...sendForm.receiverIds] } : {})
+      ...(receiverIds.length ? { receiverIds } : {})
     });
-    ElMessage.success(t('notification.sendSuccess'));
     sendVisible.value = false;
-    load();
+    const currentUserId = userStore.userInfo?.id;
+    const visibleToCurrentUser = receiverIds.length === 0
+      || (currentUserId != null && receiverIds.includes(currentUserId));
+    if (visibleToCurrentUser) {
+      ElMessage.success(t('notification.sendSuccess'));
+      Object.assign(query, { pageNum: 1, keyword: '', type: '', readStatus: '' });
+      void syncSentNotification(sentTitle, sentContent);
+    } else {
+      ElMessage.success(t('notification.sendOthersSuccess'));
+    }
   } finally {
     sending.value = false;
   }
 }
 
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function syncSentNotification(title: string, content: string) {
+  const generation = ++syncGeneration;
+  for (const delay of [250, 600, 1200, 2200, 3500]) {
+    await wait(delay);
+    if (generation !== syncGeneration) return;
+    try {
+      await load();
+    } catch {
+      return;
+    }
+    if (records.value.some((item) => item.title === title && item.content === content)) return;
+  }
+}
+
+function scheduleRealtimeRefresh() {
+  if (realtimeRefreshTimer) window.clearTimeout(realtimeRefreshTimer);
+  realtimeRefreshTimer = window.setTimeout(() => {
+    realtimeRefreshTimer = undefined;
+    void load().catch(() => undefined);
+  }, 120);
+}
+
 watch(() => [query.pageNum, query.pageSize], load);
+watch(() => notificationStore.realtimeVersion, scheduleRealtimeRefresh);
 
 onMounted(() => {
   dictStore.fetchDict('notification_type');
   load();
   loadUsers();
+});
+
+onBeforeUnmount(() => {
+  syncGeneration += 1;
+  if (realtimeRefreshTimer) window.clearTimeout(realtimeRefreshTimer);
 });
 </script>
 

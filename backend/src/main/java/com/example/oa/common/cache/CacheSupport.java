@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -37,6 +38,13 @@ public class CacheSupport {
             Object cached = redisTemplate.opsForValue().get(key);
             if (NULL_MARKER.equals(cached)) return null;
             if (cached != null) return (T) cached;
+        } catch (SerializationException e) {
+            log.info("检测到旧版或无效缓存，将自动删除并重建: key={}", key);
+            try {
+                redisTemplate.delete(key);
+            } catch (Exception deleteException) {
+                log.warn("删除无效缓存失败，将继续尝试覆盖: key={}", key, deleteException);
+            }
         } catch (Exception e) {
             log.warn("缓存读取失败，将回源: key={}", key, e);
             return loader.get();

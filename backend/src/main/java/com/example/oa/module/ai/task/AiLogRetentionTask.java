@@ -18,7 +18,8 @@ public class AiLogRetentionTask {
     @Value("${oa.ai.log-retention-days:90}")
     private int retentionDays;
 
-    @Scheduled(cron = "${oa.ai.log-retention-cron:0 20 3 * * ?}")
+    @Scheduled(cron = "${oa.ai.log-retention-cron:0 20 3 * * ?}",
+            zone = "${oa.tasks.zone:Asia/Shanghai}")
     public void purgeExpiredLogs() {
         int deleted = aiLogMapper.purgeBefore(LocalDateTime.now().minusDays(Math.max(7, retentionDays)));
         if (deleted > 0) log.info("已清理过期AI日志: count={}", deleted);

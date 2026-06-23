@@ -13,14 +13,15 @@ import com.example.oa.module.notification.dto.NotificationMessage;
 import com.example.oa.module.notification.dto.NotificationQueryRequest;
 import com.example.oa.module.notification.dto.SystemNotificationRequest;
 import com.example.oa.module.notification.entity.Notification;
+import com.example.oa.module.notification.event.NotificationCreatedEvent;
 import com.example.oa.module.notification.mapper.NotificationMapper;
 import com.example.oa.module.notification.mq.NotificationProducer;
 import com.example.oa.module.notification.service.NotificationService;
-import com.example.oa.module.notification.websocket.NotificationRealtimeService;
 import com.example.oa.module.user.entity.User;
 import com.example.oa.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +38,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheSupport cacheSupport;
-    private final NotificationRealtimeService realtimeService;
+    private final ApplicationEventPublisher eventPublisher;
     private final NotificationProducer notificationProducer;
     private final UserMapper userMapper;
 
@@ -149,11 +150,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         notification.setPushed(0);
         save(notification);
         clearUnreadCache(notification.getReceiverId());
-        boolean pushed = realtimeService.publish(notification.getReceiverId(), message);
-        if (pushed) {
-            notification.setPushed(1);
-            updateById(notification);
-        }
+        eventPublisher.publishEvent(new NotificationCreatedEvent(
+                notification.getId(), notification.getReceiverId(), message));
         return notification;
     }
 

@@ -8,6 +8,7 @@ export const useNotificationStore = defineStore('notification', () => {
   const unreadCount = ref(0);
   const latest = ref<NotificationRecord[]>([]);
   const loading = ref(false);
+  const realtimeVersion = ref(0);
 
   async function fetchUnreadCount() {
     try {
@@ -61,6 +62,7 @@ export const useNotificationStore = defineStore('notification', () => {
     };
     latest.value.unshift(record);
     latest.value = latest.value.slice(0, 8);
+    realtimeVersion.value += 1;
 
     ElNotification({
       title: record.title,
@@ -74,6 +76,7 @@ export const useNotificationStore = defineStore('notification', () => {
     unreadCount,
     latest,
     loading,
+    realtimeVersion,
     fetchUnreadCount,
     fetchLatest,
     markRead,

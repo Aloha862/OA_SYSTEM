@@ -40,4 +40,6 @@ public interface ScheduleService extends IService<Schedule> {
     AiResponse parse(ScheduleParseRequest request);
 
     void scanAndSendReminders();
+
+    int finishExpiredSchedules();
 }

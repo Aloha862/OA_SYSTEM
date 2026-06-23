@@ -3,11 +3,13 @@ package com.example.oa.config;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecutor;
 
 import java.util.concurrent.Executor;
@@ -37,6 +39,19 @@ public class AsyncSchedulingConfig implements AsyncConfigurer {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return new DelegatingSecurityContextAsyncTaskExecutor(executor);
+    }
+
+    @Bean(name = "taskScheduler")
+    public ThreadPoolTaskScheduler taskScheduler(
+            @Value("${oa.tasks.scheduler.pool-size:4}") int configuredPoolSize) {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(Math.max(2, Math.min(configuredPoolSize, 16)));
+        scheduler.setThreadNamePrefix("oa-scheduled-");
+        scheduler.setRemoveOnCancelPolicy(true);
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(30);
+        scheduler.setErrorHandler(error -> log.error("定时任务执行失败", error));
+        return scheduler;
     }
 
     @Override
